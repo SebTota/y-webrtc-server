@@ -15,20 +15,23 @@ const parser = new ArgumentParser({
   description: 'Signaling server for WebRTC communication',
 });
 parser.add_argument('--port', { type: 'int', default: 4444, help: 'Port number to listen on' });
-parser.add_argument('--host', { type: 'string', default: 'localhost', help: 'Host to listen on (e.g., localhost, 0.0.0.0)' });
+parser.add_argument('--host', { type: 'str', default: 'localhost', help: 'Host to listen on (e.g., localhost, 0.0.0.0)' });
 parser.add_argument('--ssl-cert', { help: 'Path to SSL certificate file' });
 parser.add_argument('--ssl-key', { help: 'Path to SSL private key file' });
 const args = parser.parse_args();
+console.log("Running with args:", args);
 
 const port = args.port;
 const host = args.host;
+const ssl_cert = args.ssl_cert;
+const ssl_key = args.ssl_key;
 const wss = new WebSocketServer({ noServer: true });
 
-const server = args.sslCert && args.sslKey
+const server = ssl_cert && ssl_key
   ? https.createServer(
       {
-        cert: fs.readFileSync(args.sslCert),
-        key: fs.readFileSync(args.sslKey),
+        cert: fs.readFileSync(ssl_cert),
+        key: fs.readFileSync(ssl_key),
       },
       (request, response) => {
         response.writeHead(200, { 'Content-Type': 'text/plain' });
