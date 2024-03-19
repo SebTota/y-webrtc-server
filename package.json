@@ -1,0 +1,15 @@
+{
+  "name": "signaling-server",
+  "version": "1.0.0",
+  "description": "Signaling server for WebRTC communication",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "argparse": "^2.0.1",
+    "lib0": "^0.2.93",
+    "ws": "^8.5.0"
+  }
+}
