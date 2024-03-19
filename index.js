@@ -1,139 +1,151 @@
 #!/usr/bin/env node
 
-import { WebSocketServer } from 'ws'
-import http from 'http'
-import * as map from 'lib0/map'
+import { WebSocketServer } from 'ws';
+import https from 'https';
+import http from 'http';
+import fs from 'fs';
+import * as map from 'lib0/map';
+import { ArgumentParser } from 'argparse';
 
-const wsReadyStateConnecting = 0
-const wsReadyStateOpen = 1
-const wsReadyStateClosing = 2 // eslint-disable-line
-const wsReadyStateClosed = 3 // eslint-disable-line
+const wsReadyStateConnecting = 0;
+const wsReadyStateOpen = 1;
+const pingTimeout = 30000;
 
-const pingTimeout = 30000
+const parser = new ArgumentParser({
+  description: 'Signaling server for WebRTC communication',
+});
+parser.add_argument('--port', { type: 'int', default: 4444, help: 'Port number to listen on' });
+parser.add_argument('--ssl-cert', { help: 'Path to SSL certificate file' });
+parser.add_argument('--ssl-key', { help: 'Path to SSL private key file' });
+const args = parser.parse_args();
 
-const port = process.env.PORT || 4444
-const wss = new WebSocketServer({ noServer: true })
+const port = args.port;
+const wss = new WebSocketServer({ noServer: true });
 
-const server = http.createServer((request, response) => {
-  response.writeHead(200, { 'Content-Type': 'text/plain' })
-  response.end('okay')
-})
+const server = args.sslCert && args.sslKey
+  ? https.createServer(
+      {
+        cert: fs.readFileSync(args.sslCert),
+        key: fs.readFileSync(args.sslKey),
+      },
+      (request, response) => {
+        response.writeHead(200, { 'Content-Type': 'text/plain' });
+        response.end('okay');
+      }
+    )
+  : http.createServer((request, response) => {
+      response.writeHead(200, { 'Content-Type': 'text/plain' });
+      response.end('okay');
+    });
 
 /**
- * Map froms topic-name to set of subscribed clients.
+ * Map from topic-name to set of subscribed clients.
  * @type {Map<string, Set<any>>}
  */
-const topics = new Map()
+const topics = new Map();
 
 /**
- * @param {any} conn
- * @param {object} message
+ * Send a message to a WebSocket connection.
+ * @param {WebSocket} conn - The WebSocket connection.
+ * @param {object} message - The message to send.
  */
-const send = (conn, message) => {
+function send(conn, message) {
   if (conn.readyState !== wsReadyStateConnecting && conn.readyState !== wsReadyStateOpen) {
-    conn.close()
+    conn.close();
   }
   try {
-    conn.send(JSON.stringify(message))
+    conn.send(JSON.stringify(message));
   } catch (e) {
-    conn.close()
+    conn.close();
   }
 }
 
 /**
- * Setup a new client
- * @param {any} conn
+ * Setup a new client connection.
+ * @param {WebSocket} conn - The WebSocket connection.
  */
-const onconnection = conn => {
+function onconnection(conn) {
   /**
    * @type {Set<string>}
    */
-  const subscribedTopics = new Set()
-  let closed = false
-  // Check if connection is still alive
-  let pongReceived = true
+  const subscribedTopics = new Set();
+  let closed = false;
+  let pongReceived = true;
   const pingInterval = setInterval(() => {
     if (!pongReceived) {
-      conn.close()
-      clearInterval(pingInterval)
+      conn.close();
+      clearInterval(pingInterval);
     } else {
-      pongReceived = false
+      pongReceived = false;
       try {
-        conn.ping()
+        conn.ping();
       } catch (e) {
-        conn.close()
+        conn.close();
       }
     }
-  }, pingTimeout)
+  }, pingTimeout);
   conn.on('pong', () => {
-    pongReceived = true
-  })
+    pongReceived = true;
+  });
   conn.on('close', () => {
     subscribedTopics.forEach(topicName => {
-      const subs = topics.get(topicName) || new Set()
-      subs.delete(conn)
+      const subs = topics.get(topicName) || new Set();
+      subs.delete(conn);
       if (subs.size === 0) {
-        topics.delete(topicName)
+        topics.delete(topicName);
       }
-    })
-    subscribedTopics.clear()
-    closed = true
-  })
-  conn.on('message', /** @param {object} message */ message => {
+    });
+    subscribedTopics.clear();
+    closed = true;
+  });
+  conn.on('message', message => {
     if (typeof message === 'string' || message instanceof Buffer) {
-      message = JSON.parse(message)
+      message = JSON.parse(message);
     }
     if (message && message.type && !closed) {
       switch (message.type) {
         case 'subscribe':
-          /** @type {Array<string>} */ (message.topics || []).forEach(topicName => {
+          (message.topics || []).forEach(topicName => {
             if (typeof topicName === 'string') {
-              // add conn to topic
-              const topic = map.setIfUndefined(topics, topicName, () => new Set())
-              topic.add(conn)
-              // add topic to conn
-              subscribedTopics.add(topicName)
+              const topic = map.setIfUndefined(topics, topicName, () => new Set());
+              topic.add(conn);
+              subscribedTopics.add(topicName);
             }
-          })
-          break
+          });
+          break;
         case 'unsubscribe':
-          /** @type {Array<string>} */ (message.topics || []).forEach(topicName => {
-            const subs = topics.get(topicName)
+          (message.topics || []).forEach(topicName => {
+            const subs = topics.get(topicName);
             if (subs) {
-              subs.delete(conn)
+              subs.delete(conn);
             }
-          })
-          break
+          });
+          break;
         case 'publish':
           if (message.topic) {
-            const receivers = topics.get(message.topic)
+            const receivers = topics.get(message.topic);
             if (receivers) {
-              message.clients = receivers.size
-              receivers.forEach(receiver =>
-                send(receiver, message)
-              )
+              message.clients = receivers.size;
+              receivers.forEach(receiver => send(receiver, message));
             }
           }
-          break
+          break;
         case 'ping':
-          send(conn, { type: 'pong' })
+          send(conn, { type: 'pong' });
+          break;
       }
     }
-  })
+  });
 }
-wss.on('connection', onconnection)
+
+wss.on('connection', onconnection);
 
 server.on('upgrade', (request, socket, head) => {
-  // You may check auth of request here..
-  /**
-   * @param {any} ws
-   */
   const handleAuth = ws => {
-    wss.emit('connection', ws, request)
-  }
-  wss.handleUpgrade(request, socket, head, handleAuth)
-})
+    wss.emit('connection', ws, request);
+  };
+  wss.handleUpgrade(request, socket, head, handleAuth);
+});
 
-server.listen(port)
-
-console.log('Signaling server running on localhost:', port)
+server.listen(port);
+console.log('Signaling server running on port:', port);
