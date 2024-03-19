@@ -15,11 +15,13 @@ const parser = new ArgumentParser({
   description: 'Signaling server for WebRTC communication',
 });
 parser.add_argument('--port', { type: 'int', default: 4444, help: 'Port number to listen on' });
+parser.add_argument('--host', { type: 'string', default: 'localhost', help: 'Host to listen on (e.g., localhost, 0.0.0.0)' });
 parser.add_argument('--ssl-cert', { help: 'Path to SSL certificate file' });
 parser.add_argument('--ssl-key', { help: 'Path to SSL private key file' });
 const args = parser.parse_args();
 
 const port = args.port;
+const host = args.host;
 const wss = new WebSocketServer({ noServer: true });
 
 const server = args.sslCert && args.sslKey
@@ -147,5 +149,7 @@ server.on('upgrade', (request, socket, head) => {
   wss.handleUpgrade(request, socket, head, handleAuth);
 });
 
-server.listen(port);
+server.listen(port, host, () => {
+  console.log(`Signaling server running on ${host}:${port}`);
+});
 console.log('Signaling server running on port:', port);
