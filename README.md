@@ -68,8 +68,7 @@ After=network.target
 [Service]
 ExecStart=/usr/bin/node /path/to/your/y-webrtc-server/index.js --port 443 --ssl-cert /path/to/your/cert.pem --ssl-key /path/to/your/key.pem
 Restart=always
-User=nobody
-Group=nobody
+User=root
 Environment=PATH=/usr/bin:/usr/local/bin
 Environment=NODE_ENV=production
 WorkingDirectory=/path/to/your/y-webrtc-server
@@ -79,6 +78,7 @@ WantedBy=multi-user.target
 ```
 
 Replace `/path/to/your/y-webrtc-server` with the actual path to your signaling server directory, and `/path/to/your/cert.pem` and `/path/to/your/key.pem` with the paths to your SSL certificate and private key files.
+We have to set the user to `root` to allow the server to run on port 443, which is a privileged port.
 
 5. Move the `signaling-server.service` file to the systemd directory:
 
