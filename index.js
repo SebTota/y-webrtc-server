@@ -155,4 +155,3 @@ server.on('upgrade', (request, socket, head) => {
 server.listen(port, host, () => {
   console.log(`Signaling server running on ${host}:${port}`);
 });
-console.log('Signaling server running on port:', port);
